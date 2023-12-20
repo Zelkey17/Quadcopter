@@ -78,10 +78,8 @@ class QuadroCopter(ContinuousEnv):
 
     # выдает градиенты
     def nabla_g(self, q):
-        ret = np.zeros((q.shape[0], self.q_dim))
-        for i in range(self.q_dim):
-            ret[:, i] = (self.g(q + self.eps * self.id[i]) - self.g(q - self.eps * self.id[i])) / (2 * self.eps)
-        return ret
+        grad = [2 * q[i] - 2 * self.goal_position[0] for i in range(3)]
+        return np.array(grad)
 
     # выдает num рандомных состояний  (квадрокоптер всегда параллельно плоскости и с нулевой скоростью)
     def sample_q(self, num_examples, mode='train'):

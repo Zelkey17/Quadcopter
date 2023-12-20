@@ -4,6 +4,9 @@ import casadi
 import numpy as np
 import math
 from os import path
+
+import torch
+
 from Physic import get_quadro_copter_physic
 from Quadrotor import toQuaternion, Quadrotor
 import random
@@ -17,17 +20,13 @@ class ContinuousEnv():
         self.control_coef = control_coef
         self.eps = 1e-8
         self.id = np.eye(q_dim)
-        self.seed()
-
-        # Viewer for rendering image
-        self.viewer = None
 
     # Dynamics f
     def f(self, q, u):
         return np.zeros((q.shape[0], self.q_dim))
 
     # Partial derivative of dynamics f wrt control u. Assuming linear control
-    def f_u(self, q):
+    def f_u(self, q, p):
         return np.zeros((q.shape[0], self.q_dim, self.u_dim))
 
     # Lagrangian or running cost L
@@ -58,28 +57,34 @@ class QuadroCopter(ContinuousEnv):
 
     # f(q, u) = dq / dt
     def f(self, q, u):
-        qn = self.physic.next_step(q, u)
-        return qn - q / 0.1
+        fn = []
+        for i in range(q.shape[0]):
+            qn = self.physic.next_step(q[i], u[i])
+            fn.append(qn - q / self.physic.dt)
+        return np.array(fn)
 
-    # f_u = (df / du) dot p (u0 с крышечкой)
-    # np.array(shape)
-    def f_u(self, q):
+    # f_u = (df(q) / du) @ p (u0 с крышечкой)
+    def f_u(self, q, p):
+        dfp = []
         dfu = casadi.jacobian(self.physic.dyn, self.physic.control)
         dfu_f = casadi.Function('dfu', [self.physic.state, self.physic.control], [dfu])
-        arr = np.zeros(shape=(13, 4))
-        for i in range(13 * 4):
-            arr[i // 4][i % 4] = dfu_f(q, np.array([0, 0, 0, 0]))[i]
-        return arr
+        for i in range(q.shape[0]):
+            grad = dfu_f(q[i], np.array([0, 0, 0, 0]))
+            arr = np.zeros(shape=(self.q_dim, self.u_dim))
+            for j in range(self.q_dim * self.u_dim):
+                arr[j // self.u_dim][j % self.u_dim] = grad[j]
+            dfp.append(arr.transpose() @ p[i].transpose())
+        return np.array(dfp)
 
-    # g(q) (награда в конечном состоянии)
+    # g(q) (лосс в конечном состоянии)
     def g(self, q):
-        darr = np.array([q[0], q[1], q[2]]) - self.goal_position
-        return np.dot(darr, darr)
+        darr = q[:, :3] - self.goal_position
+        loss = []
+        for i in range(darr.shape[0]):
+            loss.append(np.dot(darr[i], darr[i]))
+        return np.array(loss)
 
     # выдает градиенты
-    def nabla_g(self, q):
-        grad = [2 * q[i] - 2 * self.goal_position[0] for i in range(3)]
-        return np.array(grad)
 
     # выдает num рандомных состояний  (квадрокоптер всегда параллельно плоскости и с нулевой скоростью)
     def sample_q(self, num_examples, mode='train'):
@@ -92,3 +97,18 @@ class QuadroCopter(ContinuousEnv):
             ini_state = ini_r_I + ini_v_I + ini_q + ini_w
             q.append(ini_state)
         return np.array(q)
+
+    # выдает градиенты g
+    def nabla_g(self, q):
+        grad = []
+        for i in range(q.shape[0]):
+            gr = np.concatenate(((2 * q[i, :3] - 2 * self.goal_position), np.zeros(shape=(self.q_dim - 3))))
+            grad.append(gr)
+        return np.array(grad)
+
+c = QuadroCopter()
+q = c.sample_q(5)
+q[0][-5] = 12
+print(q)
+p = np.ones(shape=(5, 13))
+print(c.f_u(q, p))

@@ -1,5 +1,6 @@
 import casadi
 import numpy as np
+import torch
 from Quadrotor import Quadrotor
 
 
@@ -30,9 +31,9 @@ class QuadroCopterPhysic:
     # то же самое что и integrate_sys, только для 1 шага
     # control_val - массив размера 4 - управление моторами квадрокоптера на текущем шаге
     def next_step(self, state, control_val):
-        new_state = self.dyn_fn(state, np.array(control_val)).full().flatten()
+        new_state = self.dyn_fn(state, control_val).full().flatten()
 
-        return new_state
+        return torch.tensor(new_state)
 
 
 def get_quadro_copter_physic():

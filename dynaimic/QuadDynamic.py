@@ -50,18 +50,18 @@ class ContinuousEnv():
 
 
 class QuadroCopter(ContinuousEnv):
-    def __init__(self, q_dim=13, u_dim=4, control_coef=0.5, goal_position=np.zeros(shape=(3))):
+    def __init__(self, q_dim=13, u_dim=4, control_coef=0.5, goal_position=torch.zeros(3)):
         super().__init__(q_dim, u_dim, control_coef)
         self.physic = get_quadro_copter_physic()
         self.goal_position = goal_position
 
     # f(q, u) = dq / dt
-    def f(self, q, u):
+    def f(self, q: torch.tensor, u: torch.tensor) -> torch.tensor:
         fn = []
         for i in range(q.shape[0]):
             qn = self.physic.next_step(q[i], u[i])
             fn.append(qn - q / self.physic.dt)
-        return np.array(fn)
+        return torch.tensor(fn)
 
     # f_u = (df(q) / du) @ p (u0 с крышечкой)
     def f_u(self, q, p):
@@ -69,11 +69,12 @@ class QuadroCopter(ContinuousEnv):
         dfu = casadi.jacobian(self.physic.dyn, self.physic.control)
         dfu_f = casadi.Function('dfu', [self.physic.state, self.physic.control], [dfu])
         for i in range(q.shape[0]):
-            grad = dfu_f(q[i], np.array([0, 0, 0, 0]))
-            arr = np.zeros(shape=(self.q_dim, self.u_dim))
+            grad = dfu_f(np.array(q[i]), np.zeros(4))
+            arr = torch.zeros(size=(self.q_dim, self.u_dim))
             for j in range(self.q_dim * self.u_dim):
-                arr[j // self.u_dim][j % self.u_dim] = grad[j]
-            dfp.append(arr.transpose() @ p[i].transpose())
+                arr[j // self.u_dim][j % self.u_dim] = float(grad[j])
+            print(arr)
+            dfp.append(arr.T @ p[i].T)
         return np.array(dfp)
 
     # g(q) (лосс в конечном состоянии)
@@ -87,7 +88,7 @@ class QuadroCopter(ContinuousEnv):
     # выдает градиенты
 
     # выдает num рандомных состояний  (квадрокоптер всегда параллельно плоскости и с нулевой скоростью)
-    def sample_q(self, num_examples, mode='train'):
+    def sample_q(self, num_examples, mode='train') -> torch.tensor:
         q = []
         ini_v_I = [0.0, 0.0, 0.0]
         ini_q = toQuaternion(0, [1, -1, 1])
@@ -96,7 +97,7 @@ class QuadroCopter(ContinuousEnv):
             ini_r_I = [random.randint(-5, 5) for _ in range(3)]
             ini_state = ini_r_I + ini_v_I + ini_q + ini_w
             q.append(ini_state)
-        return np.array(q)
+        return torch.tensor(q)
 
     # выдает градиенты g
     def nabla_g(self, q):
@@ -105,10 +106,3 @@ class QuadroCopter(ContinuousEnv):
             gr = np.concatenate(((2 * q[i, :3] - 2 * self.goal_position), np.zeros(shape=(self.q_dim - 3))))
             grad.append(gr)
         return np.array(grad)
-
-c = QuadroCopter()
-q = c.sample_q(5)
-q[0][-5] = 12
-print(q)
-p = np.ones(shape=(5, 13))
-print(c.f_u(q, p))

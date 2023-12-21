@@ -57,26 +57,23 @@ class QuadroCopter(ContinuousEnv):
 
     # f(q, u) = dq / dt
     def f(self, q: torch.tensor, u: torch.tensor) -> torch.tensor:
-        fn = []
+        fn = torch.zeros((q.shape[0], 13))
         for i in range(q.shape[0]):
             qn = self.physic.next_step(q[i], u[i])
-            fn.append(qn - q / self.physic.dt)
-        return torch.tensor(fn)
+            fn[i] = qn
+        return fn
 
     # f_u = (df(q) / du) @ p (u0 с крышечкой)
     def f_u(self, q, p):
-        dfp = []
-        dfu = casadi.jacobian(self.physic.dyn, self.physic.control)
-        dfu_f = casadi.Function('dfu', [self.physic.state, self.physic.control], [dfu])
-        for i in range(q.shape[0]):
-            grad = dfu_f(np.array(q[i]), np.zeros(4))
-            arr = torch.zeros(size=(self.q_dim, self.u_dim))
-            for j in range(self.q_dim * self.u_dim):
-                arr[j // self.u_dim][j % self.u_dim] = float(grad[j])
-            print(arr)
-            dfp.append(arr.T @ p[i].T)
-        return np.array(dfp)
-
+        u = torch.zeros(size=(q.shape[0], 4))
+        q0 = self.f(q, u)
+        qs = torch.zeros(size=(q.shape[0], 4, 13))
+        for i in range(4):
+            u[:, i] = 0.01
+            qs[:,i,:] = self.f(q, u)
+            u[:, i] = 0
+            qs[:, i, :] -= q0
+        return (qs / 0.01) @ p.T
     # g(q) (лосс в конечном состоянии)
     def g(self, q):
         darr = q[:, :3] - self.goal_position
@@ -106,3 +103,9 @@ class QuadroCopter(ContinuousEnv):
             gr = np.concatenate(((2 * q[i, :3] - 2 * self.goal_position), np.zeros(shape=(self.q_dim - 3))))
             grad.append(gr)
         return np.array(grad)
+
+
+c = QuadroCopter()
+q = c.sample_q(5)
+p = torch.ones(size=(5, 13))
+print(c.f_u(q, p))

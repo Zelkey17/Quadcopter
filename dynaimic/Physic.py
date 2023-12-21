@@ -5,10 +5,11 @@ from Quadrotor import Quadrotor
 
 
 class QuadroCopterPhysic:
-    def __init__(self, state, control, ode, dt):
+    def __init__(self, state, control, ode, dt, uav):
         self.q_state = 13
         self.u_state = 4
         self.dt = dt
+        self.uav = uav
         self.state = state
         self.control = control
         self.dyn = ode
@@ -45,5 +46,5 @@ def get_quadro_copter_physic():
 
     dt = 0.1
     dyn = uav.X + dt * uav.f
-    qcp = QuadroCopterPhysic(uav.X, uav.U, dyn, dt)
+    qcp = QuadroCopterPhysic(uav.X, uav.U, dyn, dt, uav)
     return qcp

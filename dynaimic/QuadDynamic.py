@@ -60,13 +60,13 @@ class QuadroCopter(ContinuousEnv):
         fn = torch.zeros((q.shape[0], 13))
         for i in range(q.shape[0]):
             qn = self.physic.next_step(q[i], u[i])
-            fn[i] = qn
+            fn[i] = (qn - q) / self.physic.dt
         return fn
 
     # f_u = (df(q) / du) @ p (u0 с крышечкой)
     def f_u(self, q, p):
         u = torch.zeros(size=(q.shape[0], 4))
-        q0 = self.f(q, u)
+        q0 = self.f(q, u) + q
         qs = torch.zeros(size=(q.shape[0], 4, 13))
         for i in range(4):
             u[:, i] = 0.01

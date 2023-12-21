@@ -73,7 +73,7 @@ class QuadroCopter(ContinuousEnv):
             qs[:,i,:] = self.f(q, u)
             u[:, i] = 0
             qs[:, i, :] -= q0
-        return (qs / 0.01) @ p.T
+        return -(qs / 0.01) @ p.T
     # g(q) (лосс в конечном состоянии)
     def g(self, q):
         darr = q[:, :3] - self.goal_position
@@ -98,14 +98,8 @@ class QuadroCopter(ContinuousEnv):
 
     # выдает градиенты g
     def nabla_g(self, q):
-        grad = []
+        grad = torch.zeros(size=(q.shape[0], 13))
         for i in range(q.shape[0]):
-            gr = np.concatenate(((2 * q[i, :3] - 2 * self.goal_position), np.zeros(shape=(self.q_dim - 3))))
-            grad.append(gr)
-        return np.array(grad)
-
-
-c = QuadroCopter()
-q = c.sample_q(5)
-p = torch.ones(size=(5, 13))
-print(c.f_u(q, p))
+            gr = torch.cat(((2 * q[i, :3] - 2 * self.goal_position), torch.zeros(self.q_dim - 3)))
+            grad[i] = gr
+        return grad
